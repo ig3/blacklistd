@@ -1,0 +1,11 @@
+[Unit]
+Description=Logsurfer blacklist daemon
+
+[Service]
+WorkingDirectory=/tmp
+User=logsurfer
+Group=logsurfer
+ExecStart=/usr/local/bin/blacklistd -v
+
+[Install]
+WantedBy=multi-user.target

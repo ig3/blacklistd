@@ -1,0 +1,558 @@
+#!/usr/bin/perl
+#
+#
+
+=head1 NAME
+
+blacklistd - daemon to maintain blacklist and whitelist in ipset
+
+=head1 SYNOPSIS
+
+B<blacklistd>
+
+B<blacklistd> -B<vvv>
+
+B<blacklistd> --B<config> I</full/path/to/blacklistd.conf>
+
+=head1 DESCRIPTION
+
+B<blacklistd> is a program for maintaining a "blacklist" of ip addresses
+as an I<ipset>, for use in iptables or some other firewall.
+
+To this end, two lists are maintained: the blacklist and a whitelist.
+Addresses that are in the whitelist cannot be added to the blacklist.
+
+The blacklist is maintained as an ipset. The whitelist is maintained
+as a hash. There is, thus far, no need for the whitelist as an ipset.
+
+Both lists are persisted to disk, and loaded from disk on startup. This
+provides persistence through system restarts.
+
+B<blacklistd> reads commands for adding addresses from a named pipe (fifo).
+The default path is I</opt/blacklist/fifo>.  Each line read from the fifo
+must have three fields, separated by spaces:
+
+    list address note
+
+The I<list> is the name of the list to add the address to: blacklist or whitelist,
+which may be abbreviated to b or w respectively.
+
+The I<address> is the IP address to be added to the list.
+
+The I<note> is a note explaining why the address is being added to the list.
+
+If the address is already on the whitelist, it will not be added to the blacklist.
+
+B<blacklistd> may be started with a systemd service file like the following:
+
+    [Unit]
+    Description=Blacklistd ipset manager
+    
+    [Service]
+    WorkingDirectory=/tmp
+    User=blacklistd
+    Group=blacklistd
+    ExecStart=/usr/local/bin/blacklistd -v
+    
+    [Install]
+    WantedBy=multi-user.target
+
+The ipset B<blacklist> may be used in iptables with a rule like the following:
+
+    -A INPUT -m set --match-set blacklist src -j LOG_DROP
+
+Where LOG_DROP is a chain like the following:
+
+    -N LOG_DROP
+    -A LOG_DROP -j LOG --log-prefix "iptables LOG_DROP: " --log-level 7
+    -A LOG_DROP -j DROP
+
+Of course, a simple B<DROP> would also work.
+
+There is generally no need to refer to the whitelist in iptables, because
+addresses on the blacklist will not be added to the whitelist.
+
+Messages are written to syslog. The default service is local0.
+
+=head1 OPTIONS
+
+=over
+
+=item B<-v>
+
+Produce more verbose output. This option may be given multiple times.
+Below three times, output to STDOUT and STDERR are suppressed. Above
+three times gives very verbose debugging messages to both syslog and
+x STDOUT/STDERR. Default is to run with minimal logs to syslog - just
+additions to the lists and errors.
+
+=item B<--config>=I</full/path/to/file.conf>
+
+The full path of the configuration file. The default is
+/etc/blacklist/blacklistd.conf.
+
+=back
+
+=head1 FILES
+
+=over
+
+=item F</etc/blacklist/blacklistd.conf>
+
+The configuration file. This is read only.
+
+=item F</etc/blacklist/blacklist>
+
+The is the set of addresses that have been blacklisted. This is read to
+initialize the ipset I<blacklist>, if it doesn't exist when
+blacklistd starts. For example, after a reboot. New additions
+to the blacklist are appended to this file.
+
+=item F</etc/blacklist/whitelist>
+
+This is the set of addresses that have been whitelisted. This is read to
+initialize the ipset I<whitelist>, if it doesn't exist when blacklistd
+starts. For example, after a reboot. New additions to the whitelist
+are appended to this file.
+
+=item F</opt/blacklist/fifo>
+
+This is the I<named pipe> / I<fifo> that blacklistd creates and
+reads from. It is expected that other programs will write to this
+named pipe, to add addresses to the blacklist or whitelist.
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2019 Ian Goodacre
+
+This library is free software; you may redistribute it and/or
+modify it under the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+L<logsurfer(1)> - https://www.crypt.gen.nz/logsurfer/
+L<ipset(8)>
+
+=cut
+
+use strict;
+use warnings;
+use Getopt::Long qw(:config bundling);
+use Config::INI::Reader;
+use Data::Dumper::Concise;
+use Sys::Syslog;
+use POSIX qw(mkfifo);
+
+
+my $v = 0;  # verbosity - an integer, higher is more verbose
+my $configfile = '/etc/blacklist/blacklistd.conf';
+my $cfg = {
+    listdir     => '/etc/blacklist',
+    blacklist   => 'blacklist',
+    whitelist   => 'whitelist',
+    fifo        => '/opt/blacklist/fifo',
+};
+
+
+# Whitelist is small to keep a copy in memory, rather than ipset
+# Thus far, there is no need to refer to whitelist in iptables
+my %whitelist;
+
+
+eval {
+    GetOptions('v+'        => \$v);  
+    openlog('blacklistd', 'ndelay,nofatal,pid', 'local0');
+    syslog('info', '%s', "starting") if($v);
+    GetOptions('config=s'  => \$configfile);
+    load_config($configfile, $cfg);
+
+    initialize_lists();
+    if($v < 3) {
+        open(STDOUT, '>', '/dev/null') or die "STDOUT: $!";
+        open(STDERR, '>', '/dev/null') or die "STDOUT: $!";
+    }
+    update_lists();
+};
+if($@) {
+    print STDERR $@ if($v);
+    syslog('err', '%s', "$@");
+}
+exit;
+
+
+
+
+
+
+
+
+
+sub load_config {
+    my ($configfile, $cfg) = @_;
+
+    if(-r $configfile) {
+        my $ini = Config::INI::Reader->read_file($configfile) or die "$configfile: load failed";
+
+        foreach my $param (qw(listdir blacklist whitelist)) {
+            if(exists($ini->{_}->{$param})) {
+                $cfg->{$param} = $ini->{_}->{$param};
+                syslog('info', '%s', "$param = $cfg->{$param} from $configfile") if($v > 1);
+            }
+        }
+    }
+    print STDERR "config after load is: " . Dumper($cfg);
+}
+
+
+
+
+sub initialize_lists {
+
+    # Make sure the ipset lists exists
+    die "list directory $cfg->{listdir}: not found" unless(-d $cfg->{listdir});
+    die "list directory $cfg->{listdir}: not readable" unless(-r "$cfg->{listdir}");
+    die "list directory $cfg->{listdir}: not writable" unless(-w "$cfg->{listdir}");
+    load_ipset($cfg->{blacklist});
+    load_whitelist($cfg->{whitelist});
+}
+
+
+
+
+=head2 update_lists()
+
+This does not return, but it may die.
+
+Create and read from a fifo, and add addresses to the blacklist or whitelist,
+according to the commands read.
+
+A line from the fifo must be:
+
+    list address note
+
+Where list is blacklist or whitelist (possibly abbreviated to 'b' or 'w'),
+address is an IP address and note is arbitrary text explaining why the 
+address has been added.
+
+=cut
+
+sub update_lists {
+    create_fifo($cfg->{fifo});
+
+    # This process persistently reads the named pipe
+    # Ocassionally a process will open, write to and close the named pipe
+    # The open here blocks until the pipe is opened for writing
+    # The read here blocks until there is data, as long as the
+    # pipe has a writer open. When the pipe is not held open for write,
+    # the read here returns undef - it doesn't wait for the pipe to
+    # be reopened. So, we need another loop to close our end, then
+    # reopen the pipe - the open will block until some other process
+    # opens the pipe for writing.
+    #
+    # I don't know what happens when two processes attempt top open and
+    # write to the pipe concurrently. Currently, each writing process
+    # should open the pipe for write, write one line then close the
+    # pipe. But in the future, individual processes might open the pipe,
+    # write multiple lines over some, potentially long, period of time,
+    # then close the pipe. This might cause problems.
+    #
+    my $errors = 0;
+    while(1) {
+        eval {
+            syslog('debug', '%s', "open and read $cfg->{fifo}") if($v > 3);
+            # open blocks until there is a writer
+            open(my $fh, '<', $cfg->{fifo}) or die "open $cfg->{fifo} $!";
+            # read returns undef when there is no writer and no data
+            while(defined(my $request = <$fh>)) {
+                chomp($request);
+                process($request);
+            }
+            close($fh);
+            syslog('debug', '%s', "closed $cfg->{fifo}") if($v > 3);
+            $errors-- if($errors > 0);
+        };
+        if($@) {
+            syslog('err', '%s', "read $cfg->{fifo} failed with $@");
+            $errors++;
+            if($errors > 100) {
+                die "giving up after $errors net errors";
+            }
+        }
+    }
+}
+
+
+
+=head2 create_fifo($path)
+
+Create a fifo at the given path, if it doesn't already exist.
+
+=cut
+
+sub create_fifo {
+    my ($fifo) = @_;
+
+    unless(-e $fifo) {
+        my $dir = $fifo;
+        $dir =~ s/\/[^\/]*$//;
+        die "directory $dir: not found" unless(-d $dir);
+        my $username = getpwuid($<);
+        die "directory $dir: not writable for $username" unless(-w $dir);
+        umask 0;
+        mkfifo($fifo, 0722) or die "mkfifo $fifo $!";
+        syslog('debug', '%s', "created fifo $fifo") if($v > 2);
+    }
+}
+
+
+
+=head2 process($command)
+
+Process one command line (list address note). The given address is added
+to the specified list and persisted to a listfile, with the note.
+
+=cut
+
+sub process {
+    my $request = shift;
+    my ($list, $address, $note) = split(/\s+/, $request, 3);
+
+    die "missing list" unless defined($list);
+    die "missing address" unless defined($address);
+    die "missing note" unless defined($note);
+
+    syslog('debug', '%s', "list: $list, address: $address, note: $note")
+        if($v > 2);
+
+    return if(seen($address));
+
+    if($list =~ m/^b/) {
+        add_to_blacklist($cfg->{blacklist}, $address, $note);
+    } elsif($list =~ m/^w/) {
+        add_to_whitelist($cfg->{whitelist}, $address, $note);
+    } else {
+        syslog('err', '%s', "Ignored unknown list $list for $address: $note");
+    }
+}
+
+
+
+
+=head2 seen($address)
+
+Return true if the address has been seen recently. This allows to avoid expensive
+access to the ipsets (running processes) for addresses that have already been
+dealt with. 
+
+=cut
+
+
+BEGIN {
+    # Keep a record of recently seen addresses and don't reprocess them
+    my @seen;
+    my %seen;
+    my $seen_max = 100;
+
+
+    sub seen {
+        my ($address) = @_;
+
+        # Addresses tend to come in bunches. We only need to process each address once
+        if($seen{$address}) {
+            syslog('debug', '%s', "address $address has been seen - skipping") if($v > 2);
+            return(1);
+        }
+        $seen{$address} = 1; push(@seen, $address);
+        if($#seen > $seen_max) {
+            my $tmp = shift(@seen);
+            delete($seen{$tmp});
+        }
+        return(0);
+    }
+}
+
+
+
+
+=head2 add_to_blacklist($list, $address, $note)
+
+The blacklist is kept in an ipset and persisted to a list file
+for reload on restart. The ipset is used in iptables or some
+other firewall (else what is the point of all this?)
+
+=cut
+
+sub add_to_blacklist {
+    my ($list, $address, $note) = @_;
+
+    # Don't blacklist addresses in the whitelist, and a few others
+    return if(
+        $address =~ m/^192\.168/ or
+        $address =~ m/^127\.0\.0/ or
+        $whitelist{$address}
+    );
+
+    unless(add_to_ipset($address, $list)) {
+        add_to_listfile($address, $list, $note);
+    }
+}
+
+
+
+=head 2 add_to_whitelist($list, $address, $note)
+
+The whitelist is kept in a hash and persisted to a list file
+for reload on restart.
+
+=cut
+
+sub add_to_whitelist {
+    my ($list, $address, $note) = @_;
+
+    unless($whitelist{$address}) {
+        $whitelist{$address} = 1;
+        add_to_listfile($address, $list, $note);
+    }
+}
+
+
+
+
+=head2 create_ipset($name)
+
+Creates an ipset of type hash:ip. This will fail silently
+if the ipset already exists.
+
+=cut
+
+sub create_ipset {
+    my ($list) = @_;
+
+    # Create the list in ipset
+    my $rc = system('sudo', 'ipset', 'create', $list, '-exist',
+        'hash:ip');
+    if($rc) {
+        die "Failed to create ipset $list";
+    } else {
+        syslog('info', '%s', "created ipset $list ") if($v);
+    }
+}
+
+
+
+
+=head2 load_ipset($name)
+
+Creates and loads an ipset with addresses from a listfile.
+
+A listfile is a simple text file with one address per line. 
+The address is the first on the line but it may be (and
+typically is) followed by a note that explains why the
+address was added.
+
+=cut
+
+sub load_ipset {
+    my ($list) = @_;
+
+    # Make sure the ipset exists
+    create_ipset($cfg->{blacklist});
+
+    # Load addresses to the list
+    my $listfile = "$cfg->{listdir}/$list";
+    syslog('debug', '%s', "load list file $listfile") if($v > 2);
+    if(-e $listfile) {
+        open(my $fh, '<', $listfile) or die "$listfile: $!";
+        foreach my $line (<$fh>) {
+            chomp($line);
+            my ($address, $note) = split(/ /, $line, 2);
+            add_to_ipset($address, $list, $note);
+            syslog('debug', '%s', "added $address to $list from $listfile") if($v > 2);
+        }
+        close($fh);
+    }
+}
+
+
+=head2 load_whitelist($name)
+
+Loads the whitelist into global %whitelist.
+
+The expectation is that the whitelist is small and it is more efficient to keep it
+in memory than deal with an ipset, as iptables doesn't (yet) refer to the whitelist.
+
+=cut
+
+sub load_whitelist {
+    my ($name) = @_;
+
+    # Load addresses to the list
+    my $listfile = "$cfg->{listdir}/$name";
+    syslog('info', '%s', "load list file $listfile") if($v > 1);
+    if(-e $listfile) {
+        open(my $fh, '<', $listfile) or die "$listfile: $!";
+        foreach my $line (<$fh>) {
+            chomp($line);
+            my ($address, $note) = split(/ /, $line, 2);
+            $whitelist{$address} = 1;
+            syslog('debug', '%s', "added $address to whitelist from $listfile") if($v > 2);
+        }
+        close($fh);
+    }
+}
+
+
+
+=head2 add_to_listfile($address, $list, $note)
+
+Append to the listfile for the given list.
+
+The list files are persistent through system restarts and are used to
+reload the lists after a restart. 
+
+=cut
+
+sub add_to_listfile {
+    my ($address, $list, $note) = @_;
+
+    my $listfile = "$cfg->{listdir}/$list";
+    open(my $fh, '>>', $listfile) or die "$listfile: $!";
+    print $fh "$address $note\n";
+    close($fh);
+    syslog('debug', '%s', "saved $address to listfile $listfile") if($v > 2);
+}
+
+
+
+=head2 add_to_ipset($address, $name))
+
+Add an address to an ipset. This is a simple wrapper to the 'ipset' command.
+
+=cut
+
+sub add_to_ipset {
+    my ($address, $name) = @_;
+
+    my $rc = system('sudo', 'ipset', 'add', $name, $address);
+    if($rc) {
+        syslog('info', '%s', "Failed to add $address to ipset $name ipset returned " . ($rc >> 8)) if($v);
+        return($rc>>8);
+    }
+    syslog('info', '%s', "Added $address to ipset $name") if($v);
+    return(0);
+}
+
+
+
+
+
+sub usage {
+    my $file = $0;
+    $file =~ s/^.*\///;
+    print STDERR "$file [-v...] [--config path]\n";
+    print STDERR "-v verbose, may be given multiple times\n";
+    print STDERR "--config path - the full path of the configuration file\n";
+    exit 1;
+}

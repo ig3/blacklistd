@@ -1,0 +1,11 @@
+[Unit]
+Description=Logsurfer mail.log scanner
+
+[Service]
+WorkingDirectory=/tmp
+User=logsurfer
+Group=logsurfer
+ExecStart=/usr/local/bin/logsurfer -e -F -c /usr/local/etc/logsurfer/mail.conf /var/log/mail.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+'Invalid user [^ ]* from ([^ ]*)' - - - 0 exec "/usr/localbin/blacklist '$2' 'auth.log - $0'"
+'error: maximum authentication attempts exceeded for invalid user [^ ]* from ([^ ]*)' - - - 0 exec "/usr/local/bin/blacklist '$2' 'auth.log - $0'"
+'Connection closed by ([^ ]*) port [^ ]* \[preauth\]' - - - 0 exec "/usr/local/bin/blacklist '$2' 'auth.log - $0'"
+'Received disconnect from ([^ ]*) port [^ ]* \[preauth\]' - - - 0 exec "/usr/local/bin/blacklist '$2' 'auth.log - $0'"
+'Received disconnect from ([^ ]*) port [^ ]* Bye Bye \[preauth\]' - - - 0 exec "/usr/local/bin/blacklist '$2' 'auth.log - $0'"
+'Disconnected from authenticating user [^ ]* ([^ ]*) port [^ ]* \[preauth\]' - - - 0 exec "/usr/local/bin/blacklist '$2' 'auth.log - $0'"
+'Accepted publickey for ian from ([^ ]*) ' - - - 0 exec "/usr/local/bin/whitelist '$2' 'auth.log - $0'"
