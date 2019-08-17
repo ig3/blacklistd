@@ -1,0 +1,23 @@
+#!/usr/bin/perl
+#
+#
+use strict;
+use warnings;
+
+my $blocks;
+
+my $in = '/etc/blacklist/blacklist2';
+
+open(my $fh, '<', $in)  or die "$in: $!";
+while(my $line = <$fh>) {
+    chomp($line);
+    my ($addr, $rest) = split(/\s/, $line);
+    my ($net, $host) = ($addr =~ m/(.*)\.(.*)/);
+    push(@{$blocks->{$net}}, $host);
+}
+
+foreach my $net (sort keys %$blocks) {
+    if($#{$blocks->{$net}} > 5) {
+        print "net $net has " . ($#{$blocks->{$net}}+1) . " hosts\n";
+    }
+}
