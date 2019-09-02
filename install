@@ -10,12 +10,13 @@ fi
 
 for file in blacklistd logsurfer consolidate_blacklist
 do
+    unlink /usr/local/bin/$file
     cp bin/$file /usr/local/bin
     chown root.root /usr/local/bin/$file
     chmod 0755 /usr/local/bin/$file
 done
 
-if [ ! -d /usr/local/etc/blacklist ]
+if [ ! -d /usr/local/etc/blacklist ]; then
     mkdir /usr/local/etc/blacklist
     chown root.root /usr/local/etc/blacklist
     chmod 0755 /usr/local/etc/blacklist
@@ -25,7 +26,7 @@ cp conf/blacklistd.conf /usr/local/etc/blacklist
 chown root.root /usr/local/etc/blacklist/blacklistd.conf
 chmod 0744 /usr/local/etc/blacklist/blacklistd.conf
 
-if [ ! -d /usr/local/etc/logsurfer ]
+if [ ! -d /usr/local/etc/logsurfer ]; then
     mkdir /usr/local/etc/logsurfer
     chown root.root /usr/local/etc/logsurfer
     chmod 0755 /usr/local/etc/logsurfer
@@ -50,7 +51,7 @@ do
 done
 
 cp iptablesload /etc/network/if-pre-up.d
-chown root.root /etc/network/if-rep-up.d/iptablesload
-chmod 0744 /etc/network/if-rep-up.d/iptablesload
+chown root.root /etc/network/if-pre-up.d/iptablesload
+chmod 0744 /etc/network/if-pre-up.d/iptablesload
 
 echo "Add '-A INPUT -m set --match-set blacklist2 src -j DROP' to iptables"
