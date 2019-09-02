@@ -29,8 +29,8 @@ Both lists are persisted to disk, and loaded from disk on startup. This
 provides persistence through system restarts.
 
 B<blacklistd> reads commands for adding addresses from a named pipe (fifo).
-The default path is I</opt/blacklist/fifo>.  Each line read from the fifo
-must have three fields, separated by spaces:
+The default path is I</usr/local/data/blacklist/fifo>.  Each line read
+from the fifo must have three fields, separated by spaces:
 
     list address note
 
@@ -89,7 +89,7 @@ additions to the lists and errors.
 =item B<--config>=I</full/path/to/file.conf>
 
 The full path of the configuration file. The default is
-/etc/blacklist/blacklistd.conf.
+/usr/local/etc/blacklist/blacklistd.conf.
 
 =back
 
@@ -97,25 +97,25 @@ The full path of the configuration file. The default is
 
 =over
 
-=item F</etc/blacklist/blacklistd.conf>
+=item F</usr/local/etc/blacklist/blacklistd.conf>
 
 The configuration file. This is read only.
 
-=item F</etc/blacklist/blacklist>
+=item F</usr/local/etc/blacklist/blacklist>
 
 The is the set of addresses that have been blacklisted. This is read to
 initialize the ipset I<blacklist>, if it doesn't exist when
 blacklistd starts. For example, after a reboot. New additions
 to the blacklist are appended to this file.
 
-=item F</etc/blacklist/whitelist>
+=item F</usr/local/etc/blacklist/whitelist>
 
 This is the set of addresses that have been whitelisted. This is read to
 initialize the ipset I<whitelist>, if it doesn't exist when blacklistd
 starts. For example, after a reboot. New additions to the whitelist
 are appended to this file.
 
-=item F</opt/blacklist/fifo>
+=item F</usr/local/data/blacklist/fifo>
 
 This is the I<named pipe> / I<fifo> that blacklistd creates and
 reads from. It is expected that other programs will write to this
@@ -147,12 +147,12 @@ use POSIX qw(mkfifo);
 
 
 my $v = 0;  # verbosity - an integer, higher is more verbose
-my $configfile = '/etc/blacklist/blacklistd.conf';
+my $configfile = '/usr/local/etc/blacklist/blacklistd.conf';
 my $cfg = {
-    listdir     => '/etc/blacklist',
+    listdir     => '/usr/local/etc/blacklist',
     blacklist   => 'blacklist',
     whitelist   => 'whitelist',
-    fifo        => '/opt/blacklist/fifo',
+    fifo        => '/usr/local/data/blacklist/fifo',
 };
 
 

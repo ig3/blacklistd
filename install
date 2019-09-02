@@ -1,0 +1,56 @@
+#!/bin/bash
+#
+# Install the blacklistd programs and configuration
+#
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run by root"
+    exit 1
+fi
+
+
+for file in blacklistd logsurfer consolidate_blacklist
+do
+    cp bin/$file /usr/local/bin
+    chown root.root /usr/local/bin/$file
+    chmod 0755 /usr/local/bin/$file
+done
+
+if [ ! -d /usr/local/etc/blacklist ]
+    mkdir /usr/local/etc/blacklist
+    chown root.root /usr/local/etc/blacklist
+    chmod 0755 /usr/local/etc/blacklist
+fi
+
+cp conf/blacklistd.conf /usr/local/etc/blacklist
+chown root.root /usr/local/etc/blacklist/blacklistd.conf
+chmod 0744 /usr/local/etc/blacklist/blacklistd.conf
+
+if [ ! -d /usr/local/etc/logsurfer ]
+    mkdir /usr/local/etc/logsurfer
+    chown root.root /usr/local/etc/logsurfer
+    chmod 0755 /usr/local/etc/logsurfer
+fi
+
+for file in logsurfer/*
+do
+    file=$(basename $file)
+    cp logsurfer/$file /usr/local/etc/logsurfer
+    chown root.root /usr/local/etc/logsurfer/$file
+    chmod 0744 /usr/local/etc/logsurfer/$file
+done
+
+for file in systemd/*
+do
+    file=$(basename $file)
+    cp systemd/$file /etc/systemd/system
+    chown root.root /etc/systemd/system/$file
+    chmod 0644 /etc/systemd/system/$file
+    systemctl enable $file
+    systemctl start $file
+done
+
+cp iptablesload /etc/network/if-pre-up.d
+chown root.root /etc/network/if-rep-up.d/iptablesload
+chmod 0744 /etc/network/if-rep-up.d/iptablesload
+
+echo "Add '-A INPUT -m set --match-set blacklist2 src -j DROP' to iptables"

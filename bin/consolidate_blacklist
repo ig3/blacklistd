@@ -6,7 +6,7 @@ use warnings;
 
 my $blocks;
 
-my $in = '/etc/blacklist/blacklist2';
+my $in = '/usr/local/etc/blacklist/blacklist2';
 
 open(my $fh, '<', $in)  or die "$in: $!";
 while(my $line = <$fh>) {
