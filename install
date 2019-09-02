@@ -18,9 +18,9 @@ done
 
 if [ ! -d /usr/local/etc/blacklist ]; then
     mkdir /usr/local/etc/blacklist
-    chown root.root /usr/local/etc/blacklist
-    chmod 0655 /usr/local/etc/blacklist
 fi
+chown logsurfer.logsurfer /usr/local/etc/blacklist
+chmod 0766 /usr/local/etc/blacklist
 
 cp conf/blacklistd.conf /usr/local/etc/blacklist
 chown root.root /usr/local/etc/blacklist/blacklistd.conf
@@ -28,17 +28,24 @@ chmod 0644 /usr/local/etc/blacklist/blacklistd.conf
 
 if [ ! -d /usr/local/etc/logsurfer ]; then
     mkdir /usr/local/etc/logsurfer
-    chown root.root /usr/local/etc/logsurfer
-    chmod 0655 /usr/local/etc/logsurfer
 fi
+chown logsurfer.logsurfer /usr/local/etc/logsurfer
+chmod 0655 /usr/local/etc/logsurfer
 
 for file in logsurfer/*
 do
     file=$(basename $file)
     cp logsurfer/$file /usr/local/etc/logsurfer
-    chown root.root /usr/local/etc/logsurfer/$file
+    chown logsurfer.logsurfer /usr/local/etc/logsurfer/$file
     chmod 0644 /usr/local/etc/logsurfer/$file
 done
+
+if [ ! -d /usr/local/data/blacklist ]; then
+    mkdir -p /usr/local/data/blacklist
+fi
+chown logsurfer.logsurfer /usr/local/data/blacklist
+chmod 0766 /usr/local/data/blacklist
+
 
 for file in systemd/*
 do
