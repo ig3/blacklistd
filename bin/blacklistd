@@ -149,7 +149,7 @@ use POSIX qw(mkfifo);
 my $v = 0;  # verbosity - an integer, higher is more verbose
 my $configfile = '/usr/local/etc/blacklist/blacklistd.conf';
 my $cfg = {
-    listdir     => '/usr/local/etc/blacklist',
+    listdir     => '/usr/local/data/blacklist',
     blacklist   => 'blacklist',
     whitelist   => 'whitelist',
     fifo        => '/usr/local/data/blacklist/fifo',
