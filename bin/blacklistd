@@ -214,7 +214,8 @@ sub initialize_lists {
     die "list directory $cfg->{listdir}: not found" unless(-d $cfg->{listdir});
     die "list directory $cfg->{listdir}: not readable" unless(-r "$cfg->{listdir}");
     die "list directory $cfg->{listdir}: not writable" unless(-w "$cfg->{listdir}");
-    load_ipset($cfg->{blacklist});
+    #load_ipset($cfg->{blacklist});
+    load_nftables_set($cfg->{blacklist});
     load_whitelist($cfg->{whitelist});
 }
 
@@ -394,7 +395,8 @@ sub add_to_blacklist {
         $whitelist{$address}
     );
 
-    unless(add_to_ipset($address, $list)) {
+    #unless(add_to_ipset($address, $list)) {
+    unless(add_to_nftables_set($address, $list)) {
         add_to_listfile($address, $list, $note);
     }
 }
@@ -442,6 +444,35 @@ sub create_ipset {
 
 
 
+
+=head2 load_nftables_set($name)
+
+Loads an nftables set with addresses from a listfile.
+
+A listfile is a simple text file with one address per line. 
+The address is the first on the line but it may be (and
+typically is) followed by a note that explains why the
+address was added.
+
+=cut
+
+sub load_nftables_set {
+    my ($list) = @_;
+
+    # Load addresses to the list
+    my $listfile = "$cfg->{listdir}/$list";
+    syslog('debug', '%s', "load list file $listfile") if($v > 2);
+    if(-e $listfile) {
+        open(my $fh, '<', $listfile) or die "$listfile: $!";
+        foreach my $line (<$fh>) {
+            chomp($line);
+            my ($address, $note) = split(/ /, $line, 2);
+            add_to_nftables_set($address, $list, $note);
+            syslog('debug', '%s', "added $address to $list from $listfile") if($v > 2);
+        }
+        close($fh);
+    }
+}
 
 =head2 load_ipset($name)
 
@@ -522,6 +553,27 @@ sub add_to_listfile {
     print $fh "$address $note\n";
     close($fh);
     syslog('debug', '%s', "saved $address to listfile $listfile") if($v > 2);
+}
+
+
+
+=head2 add_to_nftables_set($address, $name))
+
+Add an address to an ipset. This is a simple wrapper to the 'ipset' command.
+
+=cut
+
+sub add_to_nftables_set {
+    my ($address, $name) = @_;
+
+    my @cmd = split(/ /, "sudo /usr/sbin/nft add element inet filter blacklist { $address }");
+    my $rc = system(@cmd);
+    if($rc) {
+        syslog('info', '%s', "Command '@cmd' failed to add $address to nftables set $name. nft returned " . ($rc >> 8)) if($v);
+        return($rc>>8);
+    }
+    syslog('info', '%s', "Added $address to nftables set $name") if($v);
+    return(0);
 }
 
 

@@ -57,8 +57,12 @@ do
     systemctl start $file
 done
 
-cp iptablesload /etc/network/if-pre-up.d
-chown root.root /etc/network/if-pre-up.d/iptablesload
-chmod 0744 /etc/network/if-pre-up.d/iptablesload
+#cp iptablesload /etc/network/if-pre-up.d
+#chown root.root /etc/network/if-pre-up.d/iptablesload
+#chmod 0744 /etc/network/if-pre-up.d/iptablesload
 
-echo "Add '-A INPUT -m set --match-set blacklist2 src -j DROP' to iptables"
+cp log_dropped_packets /etc/cron.hourly
+chown root.root /etc/cron.hourly/log_dropped_packets
+chmod 0755 /etc/cron.hourly/log_dropped_packets
+
+echo "ensure nftables has set blacklist in table filter"
