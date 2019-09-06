@@ -6,16 +6,16 @@ use Getopt::Long qw(:config bundling);
 use Data::Dumper::Concise;
 use Sys::Syslog;
 
-my $data = `/usr/sbin/iptables -Z -v -n -x -L INPUT`;
+my $data = `/usr/sbin/nft reset counter inet filter dropped`;
 
 my $packets = 0;
 my $bytes = 0;
 foreach my $line (split(/\n/, $data)) {
-    if($line =~ m/^\s*(\d+)\s+(\d+)\s+(LOG_)?DROP/) {
+    if($line =~ m/^\s*packets\s+(\d+)\s+bytes\s+(\d+)/) {
         $packets += $1;
         $bytes += $2;
     }
 }
 
-openlog('iptables dropped', 'ndelay,nofatal,pid', 'local0');
+openlog('blacklist', 'ndelay,nofatal,pid', 'local0');
 syslog('info', '%s', "Dropped $packets packets / $bytes bytes");
