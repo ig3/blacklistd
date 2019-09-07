@@ -403,10 +403,8 @@ sub add_to_blacklist {
         $whitelist{$address}
     );
 
-    #unless(add_to_ipset($address, $list)) {
-    unless(add_to_nftables_set($address, $list)) {
-        add_to_listfile($address, $list, $note);
-    }
+    add_to_listfile($address, $list, $note);
+    add_to_nftables_set($address, $list, $note);
 }
 
 
@@ -476,7 +474,7 @@ sub load_nftables_set {
             chomp($line);
             my ($address, $note) = split(/ /, $line, 2);
             add_to_nftables_set($address, $list, $note);
-            syslog('debug', '%s', "added $address to $list from $listfile") if($v > 2);
+            syslog('debug', '%s', "added $address to $list") if($v > 2);
         }
         close($fh);
     }
@@ -508,7 +506,7 @@ sub load_ipset {
             chomp($line);
             my ($address, $note) = split(/ /, $line, 2);
             add_to_ipset($address, $list, $note);
-            syslog('debug', '%s', "added $address to $list from $listfile") if($v > 2);
+            syslog('debug', '%s', "added $address to $list") if($v > 2);
         }
         close($fh);
     }
@@ -567,9 +565,9 @@ sub add_to_listfile {
     if($cfg->{nft_listdir}) {
         my $listfile = "$cfg->{nft_listdir}/${list}.nft";
         open(my $fh, '>>', $listfile) or die "open >> $listfile: $!";
-        print $fh pad("add element inet filter $list { $address } ") . "# $note\n";
+        print $fh "add element inet filter $list { $address }\n";
         close($fh);
-        syslog('debug', '%s', "saved $address to listfile $listfile") if($v > 2);
+        syslog('info', '%s', "saved $address to listfile $listfile for $note") if($v);
     }
 }
 
@@ -606,7 +604,7 @@ sub add_to_nftables_set {
         syslog('info', '%s', "Command '@cmd' failed to add $address to nftables set $name. nft returned " . ($rc >> 8)) if($v);
         return($rc>>8);
     }
-    syslog('info', '%s', "Added $address to nftables set $name") if($v);
+    syslog('info', '%s', "Added $address to nftables set $name") if($v > 1);
     return(0);
 }
 
