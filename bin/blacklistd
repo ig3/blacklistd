@@ -150,6 +150,7 @@ my $v = 0;  # verbosity - an integer, higher is more verbose
 my $configfile = '/usr/local/etc/blacklist/blacklistd.conf';
 my $cfg = {
     listdir     => '/usr/local/data/blacklist',
+    nft_listdir => '/usr/local/etc/nftables.d',
     blacklist   => 'blacklist',
     whitelist   => 'whitelist',
     fifo        => '/usr/local/data/blacklist/fifo',
@@ -170,8 +171,8 @@ eval {
 
     initialize_lists();
     if($v < 3) {
-        open(STDOUT, '>', '/dev/null') or die "STDOUT: $!";
-        open(STDERR, '>', '/dev/null') or die "STDOUT: $!";
+        open(STDOUT, '>', '/dev/null') or die "open > /dev/null to STDOUT: $!";
+        open(STDERR, '>', '/dev/null') or die "open > /dev/null to STDERR $!";
     }
     update_lists();
 };
@@ -210,10 +211,17 @@ sub load_config {
 
 sub initialize_lists {
 
-    # Make sure the ipset lists exists
-    die "list directory $cfg->{listdir}: not found" unless(-d $cfg->{listdir});
-    die "list directory $cfg->{listdir}: not readable" unless(-r "$cfg->{listdir}");
-    die "list directory $cfg->{listdir}: not writable" unless(-w "$cfg->{listdir}");
+#    # Make sure the ipset lists exists
+#    if($cfg->{listdir}) {
+#        die "list directory $cfg->{listdir}: not found" unless(-d $cfg->{listdir});
+#        die "list directory $cfg->{listdir}: not readable" unless(-r "$cfg->{listdir}");
+#        die "list directory $cfg->{listdir}: not writable" unless(-w "$cfg->{listdir}");
+#    }
+#    if($cfg->{nft_listdir}) {
+#        die "list directory $cfg->{nft_listdir}: not found" unless(-d $cfg->{nft_listdir});
+#        die "list directory $cfg->{nft_listdir}: not readable" unless(-r "$cfg->{nft_listdir}");
+#        die "list directory $cfg->{nft_listdir}: not writable" unless(-w "$cfg->{nft_listdir}");
+#    }
     #load_ipset($cfg->{blacklist});
     load_nftables_set($cfg->{blacklist});
     load_whitelist($cfg->{whitelist});
@@ -264,7 +272,7 @@ sub update_lists {
         eval {
             syslog('debug', '%s', "open and read $cfg->{fifo}") if($v > 3);
             # open blocks until there is a writer
-            open(my $fh, '<', $cfg->{fifo}) or die "open $cfg->{fifo} $!";
+            open(my $fh, '<', $cfg->{fifo}) or die "open < $cfg->{fifo} $!";
             # read returns undef when there is no writer and no data
             while(defined(my $request = <$fh>)) {
                 chomp($request);
@@ -463,7 +471,7 @@ sub load_nftables_set {
     my $listfile = "$cfg->{listdir}/$list";
     syslog('debug', '%s', "load list file $listfile") if($v > 2);
     if(-e $listfile) {
-        open(my $fh, '<', $listfile) or die "$listfile: $!";
+        open(my $fh, '<', $listfile) or die "open < $listfile: $!";
         foreach my $line (<$fh>) {
             chomp($line);
             my ($address, $note) = split(/ /, $line, 2);
@@ -495,7 +503,7 @@ sub load_ipset {
     my $listfile = "$cfg->{listdir}/$list";
     syslog('debug', '%s', "load list file $listfile") if($v > 2);
     if(-e $listfile) {
-        open(my $fh, '<', $listfile) or die "$listfile: $!";
+        open(my $fh, '<', $listfile) or die "open < $listfile: $!";
         foreach my $line (<$fh>) {
             chomp($line);
             my ($address, $note) = split(/ /, $line, 2);
@@ -523,7 +531,7 @@ sub load_whitelist {
     my $listfile = "$cfg->{listdir}/$name";
     syslog('info', '%s', "load list file $listfile") if($v > 1);
     if(-e $listfile) {
-        open(my $fh, '<', $listfile) or die "$listfile: $!";
+        open(my $fh, '<', $listfile) or die "open < $listfile: $!";
         foreach my $line (<$fh>) {
             chomp($line);
             my ($address, $note) = split(/ /, $line, 2);
@@ -548,11 +556,32 @@ reload the lists after a restart.
 sub add_to_listfile {
     my ($address, $list, $note) = @_;
 
-    my $listfile = "$cfg->{listdir}/$list";
-    open(my $fh, '>>', $listfile) or die "$listfile: $!";
-    print $fh "$address $note\n";
-    close($fh);
-    syslog('debug', '%s', "saved $address to listfile $listfile") if($v > 2);
+    if($cfg->{listdir}) {
+        my $listfile = "$cfg->{listdir}/$list";
+        open(my $fh, '>>', $listfile) or die "open >> $listfile: $!";
+        print $fh "$address $note\n";
+        close($fh);
+        syslog('debug', '%s', "saved $address to listfile $listfile") if($v > 2);
+    }
+
+    if($cfg->{nft_listdir}) {
+        my $listfile = "$cfg->{nft_listdir}/${list}.nft";
+        open(my $fh, '>>', $listfile) or die "open >> $listfile: $!";
+        print $fh pad("add element inet filter $list { $address } ") . "# $note\n";
+        close($fh);
+        syslog('debug', '%s', "saved $address to listfile $listfile") if($v > 2);
+    }
+}
+
+
+
+=head2 pad
+sub pad {
+    my ($str) = @_;
+
+    $str .= ' ' x (4 - length($str) % 4);
+
+    retrun($str);
 }
 
 
