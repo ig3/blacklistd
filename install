@@ -46,6 +46,16 @@ fi
 chown logsurfer.logsurfer /usr/local/data/blacklist
 chmod 0755 /usr/local/data/blacklist
 
+if [ ! -d /usr/local/etc/nftables.d ]; then
+    mkdir -p /usr/local/etc/nftables.d
+fi
+chown root.root /usr/local/etc/nftables.d
+chmod 0755 /usr/local/etc/nftables.d
+
+touch /usr/local/etc/nftables.d/blacklist.nft
+chown logsurfer.logsurfer /usr/local/etc/nftables.d/blacklist.nft
+chmod 0644 /usr/local/etc/nftables.d/blacklist.nft
+
 
 for file in systemd/*
 do
