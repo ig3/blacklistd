@@ -1,28 +1,46 @@
 #!/usr/bin/perl
 #
+# Consolidate ranges of ip addresses in the blacklist.
+#
+# When an nftables set has flag interval, intervals of
+# IP addresses may be added to the set. There are two
+# formats for adding intervals:
+#
+#   225.0.0.0/24,
+#   225.0.1.0-225.0.1.17
+#
+# When the form address/mask is used, it is possible
+# to specify an address with bits set in the host range
+# (e.g. 225.0.0.7/24) but these will be ignored and
+# the network address will be that with the host address
+# of 0 (e.g. 225.0.0.0 in the previous example).
+#
+# When the form address-address is used, arbitrary starting
+# and ending addresses may be specified.
 #
 use strict;
 use warnings;
 use Data::Dumper::Concise;
 use Net::IP;
 
-#my $blacklist = '/usr/local/etc/nftables.d/blacklist.nft';
-my $blacklist = './blacklist.nft';
+my $blacklist = '/usr/local/etc/nftables.d/blacklist.nft';
+#my $blacklist = './blacklist.nft';
 my $mod_time = (stat($blacklist))[9];
 
-my $ips = get_ips();
-print Dumper($ips);
+my $intervals = get_intervals();
+print Dumper($intervals);
 
 my $range_start;
 my $range_end;
 my $total_blocks;
-foreach my $addr (@$ips) {
-    my ($start, $end) = get_range($addr);
+foreach my $interval (@$intervals) {
+    my ($start, $end) = get_range($interval);
     if(defined($range_start)) {
-        if($start == $range_end + 1) {
-            $range_end = $end;
+        if($start <= $range_end + 1) {
+            $range_end = $end if($end > $range_end);
         } else {
-            my $blocks = to_blocks($range_start, $range_end);
+            #            my $blocks = to_cidr_blocks($range_start, $range_end);
+            my $blocks = to_nft_interval($range_start, $range_end);
             push(@$total_blocks, @$blocks);
             $range_start = $start;
             $range_end = $end;
@@ -34,7 +52,8 @@ foreach my $addr (@$ips) {
 }
 
 if(defined($range_start)) {
-    my $blocks = to_blocks($range_start, $range_end);
+    #    my $blocks = to_cidr_blocks($range_start, $range_end);
+    my $blocks = to_nft_interval($range_start, $range_end);
     push(@$total_blocks, @$blocks);
 }
 
@@ -52,15 +71,17 @@ open(my $fh, '>', $new) or die "$new: $!";
 print $fh $nft;
 close($fh);
 
+print $nft;
+
 print "mod_time = $mod_time\n";
 my $new_mod_time = (stat($blacklist))[9];
 print "new_mod_time = $new_mod_time\n";
 
 if($mod_time == $new_mod_time) {
     print "update\n";
-    rename($blacklist, $old);
-    rename($new, $blacklist);
-    print "old: $old\n";
+    #    rename($blacklist, $old);
+    #    rename($new, $blacklist);
+    #    print "old: $old\n";
 }
 
 exit(0);
@@ -79,9 +100,18 @@ sub blocks_to_nft {
 }
 
 
+sub to_nft_interval {
+    my ($start, $end) = @_;
+    if($start == $end) {
+        return([ to_dd($start) ]);
+    } else {
+        return([ to_dd($range_start) . '-' . to_dd($range_end) ]);
+    }
+}
+
 # takes two decimal network addresses
 # returns a set of network blocks that cover the range
-sub to_blocks {
+sub to_cidr_blocks {
     my ($start, $end) = @_;
 
     my $blocks;
@@ -115,22 +145,40 @@ sub to_blocks {
 }
 
 
+# return tuple ($start,$end) where start and end
+# are decimal network addresses.
 sub get_range {
     my ($addr) = @_;
 
-    my ($ip,$len) = ($addr =~ m/^([0-9\.]*)(?:\/(.*))?$/);
-    $len = 32 unless($len);
-    my $dec = 0;
-    foreach my $part (split(/\./, $ip)) {
-        $dec = $dec * 256 + $part;
+    my $start;
+    my $end;
+
+    if($addr =~ m/^(.*)-(.*)$/) {
+        $start = to_dec($1);
+        $end = to_dec($2);
+    } elsif($addr =~ m/^(.*)\/(.*)$/) {
+        my $mask = (2 ** (32 - $2) - 1);
+        $start = to_dec($1) & (~$mask);
+        $end = $start | $mask;
+    } else {
+        $start = to_dec($addr);
+        $end = $start;
     }
-    my $mask = (2 ** (32 - $len) - 1);
-    my $start = $dec & (~$mask);
-    my $end = $start | $mask;
 
     return($start, $end);
 }
 
+
+
+sub to_dec {
+    my ($addr) = @_;
+
+    my $dec = 0;
+    foreach my $part (split(/\./, $addr)) {
+        $dec = $dec * 256 + $part;
+    }
+    return($dec);
+}
 
 
 # Convert a decimal address to dotted decimal
@@ -148,12 +196,12 @@ sub to_dd {
     return("$p1.$p2.$p3.$p4");
 }
 
-sub get_ips {
-    my $ips;
+sub get_intervals {
+    my $intervals;
     open(my $fh, '<', $blacklist) or die "$blacklist: $!";
     foreach my $line (<$fh>) {
         if($line =~ m/{ (.*) }/) {
-            push(@$ips, $1);
+            push(@$intervals, $1);
         }
     }
     close($fh);
@@ -162,7 +210,7 @@ sub get_ips {
         map substr($_, 4),
            sort
               map pack('C4a*', (split(/[\.\/]/))[0..3], $_),
-                 @$ips
+                 @$intervals
     ];
 
     return($sorted);
