@@ -6,18 +6,19 @@ use warnings;
 
 my $blocks;
 
-my $in = '/usr/local/etc/blacklist/blacklist2';
+my $in = '/usr/local/etc/nftables.d/blacklist.nft';
 
 open(my $fh, '<', $in)  or die "$in: $!";
 while(my $line = <$fh>) {
-    chomp($line);
-    my ($addr, $rest) = split(/\s/, $line);
-    my ($net, $host) = ($addr =~ m/(.*)\.(.*)/);
-    push(@{$blocks->{$net}}, $host);
+    if($line =~ m/{ (.*) }/) {
+        my $addr = $1;
+        my ($net, $host) = ($addr =~ m/(.*)\.(.*)/);
+        push(@{$blocks->{$net}}, $host);
+    }
 }
 
-foreach my $net (sort keys %$blocks) {
+foreach my $net (sort { $#{$blocks->{$b}} <=> $#{$blocks->{$a}} } keys %$blocks) {
     if($#{$blocks->{$net}} > 5) {
-        print "net $net has " . ($#{$blocks->{$net}}+1) . " hosts\n";
+        print "net ${net}.0/24 has " . ($#{$blocks->{$net}}+1) . " hosts\n";
     }
 }
