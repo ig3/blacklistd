@@ -70,15 +70,18 @@ flush ruleset
 
 table inet filter {
     counter dropped {
-		packets 0 bytes 0
-	}
-
+      packets 0 bytes 0
+    }
     set blacklist {
         type ipv4_addr
         # The interval flag allows network addresses (e.g. 192.168.0.0/24) in the set
         flags interval
     }
-
+    set whitelist {
+        type ipv4_addr
+        # The interval flag allows network addresses (e.g. 192.168.0.0/24) in the set
+        flags interval
+    }
     chain LOG_DROP {
         log prefix "iptables LOG_DROP: " level debug
         drop
