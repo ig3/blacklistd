@@ -29,6 +29,9 @@ if you want to build it from source.
 ### Perl
 The package from your distribution will suffice.
 
+#### Config::INI::Reader
+$ sudo cpan install Config::INI::Reader
+
 ## Installation
 
 Clone this repository and run the install script.
