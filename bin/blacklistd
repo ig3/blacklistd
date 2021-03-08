@@ -598,7 +598,7 @@ Add an address to an ipset. This is a simple wrapper to the 'ipset' command.
 sub add_to_nftables_set {
     my ($address, $name) = @_;
 
-    my @cmd = split(/ /, "sudo /usr/sbin/nft add element inet filter blacklist { $address }");
+    my @cmd = split(/ /, "sudo nft add element inet filter blacklist { $address }");
     my $rc = system(@cmd);
     if($rc) {
         syslog('info', '%s', "Command '@cmd' failed to add $address to nftables set $name. nft returned " . ($rc >> 8)) if($v);
