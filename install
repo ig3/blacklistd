@@ -7,8 +7,29 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+if ! command -v logsurfer
+then
+  echo "logsurfer not found"
+  echo "install logsurfer and try again"
+  exit 1
+fi
 
-for file in blacklistd logsurfer consolidate_blacklist
+if ! command -v nft
+then
+  echo "nft not found"
+  echo "install nftables and try again"
+  exit 1
+fi
+
+if ! command -v perl
+then
+  echo "perl not found"
+  echo "install perl and try again"
+  exit 1
+fi
+
+
+for file in blacklistd consolidate_blacklist
 do
     unlink /usr/local/bin/$file
     cp bin/$file /usr/local/bin

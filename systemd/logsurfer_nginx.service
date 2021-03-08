@@ -5,7 +5,7 @@ Description=Logsurfer mail.log scanner
 WorkingDirectory=/tmp
 User=logsurfer
 Group=logsurfer
-ExecStart=/usr/local/bin/logsurfer -e -F -c /usr/local/etc/logsurfer/nginx.conf /var/log/nginx/access.log
+ExecStart=logsurfer -e -F -c /usr/local/etc/logsurfer/nginx.conf /var/log/nginx/access.log
 
 [Install]
 WantedBy=multi-user.target

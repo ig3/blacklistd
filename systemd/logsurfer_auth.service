@@ -5,7 +5,7 @@ Description=Logsurfer auth.log scanner
 WorkingDirectory=/tmp
 User=logsurfer
 Group=logsurfer
-ExecStart=/usr/local/bin/logsurfer -e -F -c /usr/local/etc/logsurfer/auth.conf /var/log/auth.log
+ExecStart=logsurfer -e -F -c /usr/local/etc/logsurfer/auth.conf /var/log/auth.log
 
 [Install]
 WantedBy=multi-user.target

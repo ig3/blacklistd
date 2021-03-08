@@ -11,6 +11,24 @@ are available from [ig3/logsufer](https://github.com/ig3/logsurfer)),
 a few logsurfer configurations and systemd service files to run
 blacklistd and the logsurfer instances.
 
+## Prerequisites
+
+### logsurfer
+If logsurfer isn't available as a package on your distribution, you can
+easily build it from [source](https://github.com/k3/logsurfer). For some
+minor enhancements you may find helpful, you can build from
+[this fork](https://github.com/ig3/logsurfer).
+
+### nftables
+See [nftables from distributions](https://wiki.nftables.org/wiki-nftables/index.php/Nftables_from_distributions) 
+if you want to install it from a package.
+
+See [building and installing nftables from source](https://wiki.nftables.org/wiki-nftables/index.php/Building_and_installing_nftables_from_sources)
+if you want to build it from source.
+
+### Perl
+The package from your distribution will suffice.
+
 ## Installation
 
 Clone this repository and run the install script.
