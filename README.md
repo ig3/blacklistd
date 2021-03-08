@@ -225,6 +225,10 @@ simple. It is just text processing (a Perl forte). I might reimplement it in
 JavaScript on Node.
 
 
+## Logging
+
+The blacklistd script logs to syslog facility local0. 
+
 ## TODO
 
 Configuration needs to be refactored. Currently, it is in both
